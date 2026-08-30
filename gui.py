@@ -3,22 +3,11 @@ import sys
 import threading
 import time
 import traceback
-from webbrowser import open as web
 
 import FreeSimpleGUI as sg
 
-from base import LINKS, VERSION, LoginException, Scraper, Udemy, scraper_dict, logger
-from images import (
-    auto_login,
-    back,
-    check_mark,
-    exit_,
-    icon,
-    login,
-    logout,
-    manual_login_,
-    start,
-)
+from base import VERSION, LoginException, Scraper, Udemy, scraper_dict, logger
+from images import check_mark, icon
 
 sg.set_global_icon(icon)
 
@@ -29,17 +18,6 @@ sg.set_options(
     border_width=0,
     font=10,
 )
-
-
-def update_enrolled_courses():
-    while True:
-        logger.debug(f"Enrolled courses count: {len(udemy.enrolled_courses)}")
-        new_menu = [
-            ["Help", ["Support", "Github", "Discord"]],
-            [f"Total Courses: {len(udemy.enrolled_courses)}"],
-        ]
-        main_window.write_event_value("Update-Menu", new_menu)
-        time.sleep(10)
 
 
 def create_scraping_thread(site: str):
@@ -120,6 +98,7 @@ def scrape():
             main_window["stat_already"].update(value=f"{udemy.already_enrolled_c}")
             main_window["stat_excluded"].update(value=f"{udemy.excluded_c}")
             main_window["stat_expired"].update(value=f"{udemy.expired_c}")
+            main_window["stat_failed"].update(value=f"{udemy.failed_c}")
 
             ready_count = len(getattr(udemy, "valid_courses", []))
             main_window["stat_ready_enroll"].update(value=f"{ready_count}/5")
@@ -145,6 +124,7 @@ def scrape():
         )
         main_window["e_c"].update(value=f"Expired Courses: {udemy.expired_c}")
         main_window["ex_c"].update(value=f"Excluded Courses: {udemy.excluded_c}")
+        main_window["f_c"].update(value=f"Checkout Failed: {udemy.failed_c}")
 
     except Exception:
         e = traceback.format_exc()
@@ -157,6 +137,8 @@ def scrape():
             "Error",
             e + f"\n\n{str(udemy.course)}" + f"|:|Error {VERSION}",
         )
+    finally:
+        main_window.write_event_value("Done", "")
 
 
 #################################
@@ -167,8 +149,6 @@ logger.info("Starting GUI application")
 udemy.load_settings()
 login_title, main_title = udemy.check_for_update()
 
-
-menu = [["Help", ["Support", "Github", "Discord"]]]
 
 login_error = False
 
@@ -190,9 +170,20 @@ except LoginException:
 if login_error:
     c1 = [
         [
-            sg.Button(key="a_login", image_data=auto_login),
-            sg.T(""),
-            sg.B(key="m_login", image_data=manual_login_),
+            sg.Button(
+                "AUTO LOGIN",
+                key="a_login",
+                button_color=("#06130a", "#2ecc71"),
+                font=("Segoe UI", 11, "bold"),
+                size=(14, 1),
+            ),
+            sg.B(
+                "MANUAL LOGIN",
+                key="m_login",
+                button_color=("#ffffff", "#a435f0"),
+                font=("Segoe UI", 11, "bold"),
+                size=(14, 1),
+            ),
         ],
         [
             sg.Checkbox(
@@ -230,14 +221,24 @@ if login_error:
             )
         ],
         [
-            sg.B(key="Back", image_data=back),
-            sg.T("                     "),
-            sg.B(key="Login", image_data=login),
+            sg.B(
+                "BACK",
+                key="Back",
+                button_color=("#e6e9ef", "#3a4356"),
+                font=("Segoe UI", 11, "bold"),
+                size=(14, 1),
+            ),
+            sg.B(
+                "LOGIN",
+                key="Login",
+                button_color=("#06130a", "#2ecc71"),
+                font=("Segoe UI", 11, "bold"),
+                size=(14, 1),
+            ),
         ],
     ]
 
     login_layout = [
-        [sg.Menu(menu)],
         [sg.Column(c1, key="col1"), sg.Column(c2, visible=False, key="col2")],
     ]
 
@@ -281,15 +282,6 @@ if login_error:
 
             login_window["email"].update(value=udemy.settings["email"])
             login_window["password"].update(value=udemy.settings["password"])
-
-        elif event == "Github":
-            web(LINKS["github"])
-
-        elif event == "Support":
-            web(LINKS["support"])
-
-        elif event == "Discord":
-            web(LINKS["discord"])
 
         elif event == "Back":
             login_window["col1"].update(visible=True)
@@ -602,6 +594,7 @@ done_col = [
     [sg.Text("Already Enrolled:              ", key="ae_c", text_color="#00FFFF")],
     [sg.Text("Expired Courses:           ", key="e_c", text_color="#FF0000")],
     [sg.Text("Excluded Courses:          ", key="ex_c", text_color="#FF4500")],
+    [sg.Text("Checkout Failed:           ", key="f_c", text_color="#FF6347")],
 ]
 
 current_course_panel = [
@@ -656,6 +649,10 @@ stats_panel = [
         sg.Text("Pending Enrollment:", text_color="#4deeea", size=(15, 1)),
         sg.Text("0/20", key="stat_ready_enroll", text_color="#FFA500", size=(8, 1)),
     ],
+    [
+        sg.Text("Checkout Failed:", text_color="#4deeea", size=(12, 1)),
+        sg.Text("0", key="stat_failed", text_color="#FF6347", size=(14, 1)),
+    ],
 ]
 
 
@@ -671,30 +668,24 @@ main_col = [
             border_width=2,
         )
     ],
-    [
-        sg.Button(
-            key="Start",
-            tooltip="Once started will not stop until completed",
-            image_data=start,
-        )
-    ],
 ]
 
+logout_style = {
+    "button_color": ("#ffffff", "#c0392b"),
+    "font": ("Segoe UI", 11, "bold"),
+    "size": (14, 1),
+}
 if (
     udemy.settings["stay_logged_in"]["auto"]
     or udemy.settings["stay_logged_in"]["manual"]
 ):
-    logout_btn_lo = sg.Button(key="Logout", image_data=logout)
+    logout_btn_lo = sg.Button("LOGOUT & EXIT", key="Logout", **logout_style)
 else:
-    logout_btn_lo = sg.Button(key="Logout", image_data=logout, visible=False)
+    logout_btn_lo = sg.Button(
+        "LOGOUT & EXIT", key="Logout", visible=False, **logout_style
+    )
 
 main_lo = [
-    [
-        sg.Menu(
-            menu,
-            key="mn",
-        )
-    ],
     [sg.Text(f"Logged in as: {udemy.display_name}", key="user_t"), logout_btn_lo],
     [
         sg.pin(sg.Column(main_col, key="main_col")),
@@ -704,8 +695,24 @@ main_lo = [
         sg.pin(sg.Column(enrollment_panel, key="enrollment_panel", visible=False)),
     ],
     [
-        sg.Button(key="Exit", image_data=exit_),
-        sg.Text("Made with 🩷 by techtanic", justification="right", expand_x=True),
+        sg.Button(
+            "START",
+            key="Start",
+            tooltip="Once started will not stop until completed",
+            button_color=("#06130a", "#2ecc71"),
+            font=("Segoe UI", 11, "bold"),
+            size=(14, 1),
+        ),
+        sg.Button(
+            "EXIT",
+            key="Exit",
+            button_color=("#ffffff", "#c0392b"),
+            font=("Segoe UI", 11, "bold"),
+            size=(14, 1),
+        ),
+        sg.Text(
+            "Made with 🩷 by SteProTECH", justification="right", expand_x=True
+        ),
     ],
 ]
 
@@ -718,7 +725,6 @@ main_window = sg.Window(
     main_lo,
     finalize=True,
 )
-threading.Thread(target=update_enrolled_courses, daemon=True).start()
 while True:
     event, values = main_window.read()
 
@@ -740,16 +746,7 @@ while True:
         udemy.save_settings()
         break
 
-    elif event == "Support":
-        web(LINKS["support"])
-
-    elif event == "Github":
-        web(LINKS["github"])
-
-    elif event == "Discord":
-        web(LINKS["discord"])
-
-    elif event == "Start" and main_window["main_col"].visible:
+    elif event == "Start":
 
         for setting in ["languages", "categories", "sites"]:
             for key in udemy.settings[setting]:
@@ -777,7 +774,11 @@ while True:
             continue
         scraper = Scraper(udemy.sites)
         udemy.window = main_window
+        main_window["Start"].update(disabled=True)
         threading.Thread(target=scrape, daemon=True).start()
+
+    elif event == "Done":
+        main_window["Start"].update(disabled=False)
 
     elif event == "Error":
         msg = values["Error"].split("|:|")
@@ -787,7 +788,4 @@ while True:
         logger.exception(f"GUI Error Popup: {title} - {error_text}")
 
         sg.popup_scrolled(error_text, title=title)
-    elif event == "Update-Menu":
-        menu = values["Update-Menu"]
-        main_window["mn"].update(menu)
 main_window.close()

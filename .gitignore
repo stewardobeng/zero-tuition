@@ -12,3 +12,12 @@ gui-test.py
 duce-gui-settings.json
 duce-cli-settings.json
 *.log
+zerotuition-gui-settings.json
+zerotuition-cli-settings.json
+zerotuition.db
+zerotuition-courses.json
+.venv-build/
+__pycache__/
+*.spec
+log.txt
+error.html

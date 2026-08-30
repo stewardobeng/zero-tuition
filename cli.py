@@ -72,7 +72,7 @@ def create_layout() -> Layout:
 def create_header() -> Panel:
     """Create the header panel."""
     return Panel(
-        f"[bold blue]Discounted Udemy Course Enroller[/bold blue] [cyan]{VERSION}[/cyan] | Logged in as: [bold green]{udemy.display_name}[/bold green] | [yellow]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/yellow]",
+        f"[bold blue]ZeroTuition[/bold blue] [cyan]{VERSION}[/cyan] | Logged in as: [bold green]{udemy.display_name}[/bold green] | [yellow]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/yellow]",
         style="white on blue",
     )
 
@@ -81,7 +81,7 @@ def create_footer() -> Panel:
     """Create the footer panel."""
 
     return Panel(
-        "Made with [bold magenta]:heart:[/bold magenta]  by techtanic",
+        "Made with [bold magenta]:heart:[/bold magenta]  by SteProTECH",
         style="white on dark_blue",
         border_style="bright_blue",
         padding=(0, 2),
@@ -125,9 +125,18 @@ def create_stats_panel(udemy: Udemy) -> Panel:
         f"[orange1]{len(getattr(udemy, 'valid_courses', []))}/5[/orange1]",
     )
 
+    row3 = Table.grid(padding=3)
+    row3.add_column(style="cyan", justify="right", width=22)
+    row3.add_column(style="white", justify="left", width=15)
+    row3.add_row(
+        "Checkout Failed:",
+        f"[red]{udemy.failed_c}[/red]",
+    )
+
     grid = Table.grid(padding=2)
     grid.add_row(row1)
     grid.add_row(row2)
+    grid.add_row(row3)
 
     return Panel(
         grid,
@@ -211,7 +220,7 @@ if __name__ == "__main__":
 
         console.print(
             Panel.fit(
-                f"[bold blue]Discounted Udemy Course Enroller[/bold blue] [cyan]{VERSION}[/cyan]",
+                f"[bold blue]ZeroTuition[/bold blue] [cyan]{VERSION}[/cyan]",
                 title="Welcome",
                 border_style="cyan",
             )
@@ -342,6 +351,7 @@ if __name__ == "__main__":
         table.add_row("Already Enrolled", f"[cyan]{udemy.already_enrolled_c}[/cyan]")
         table.add_row("Excluded Courses", f"[yellow]{udemy.excluded_c}[/yellow]")
         table.add_row("Expired Courses", f"[red]{udemy.expired_c}[/red]")
+        table.add_row("Checkout Failed", f"[red]{udemy.failed_c}[/red]")
 
         console.print(table)
 

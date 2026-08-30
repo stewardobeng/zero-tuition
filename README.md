@@ -9,9 +9,11 @@
     <a href="https://github.com/techtanic/Discounted-Udemy-Course-Enroller"><img src="https://cdn.discordapp.com/attachments/823472016999972884/841661124410736710/standard_13.gif"></a>
 </p>
 
-# Discounted Udemy Course Enroller
+# ZeroTuition
 
 > Software to enroll in available Udemy Paid/Free courses having coupons automatically to your Udemy account.
+
+A fork of [techtanic/Discounted-Udemy-Course-Enroller](https://github.com/techtanic/Discounted-Udemy-Course-Enroller) with scraper and checkout reliability fixes, maintained by SteProTECH. Licensed under AGPL-3.0.
 
 Everything you need can be on the website: https://techtanic.github.io/duce/
 
