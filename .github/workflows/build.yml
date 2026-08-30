@@ -68,7 +68,7 @@ jobs:
         with:
           tag_name: ${{ steps.get_version.outputs.TAG }}
           name: ZeroTuition ${{ steps.get_version.outputs.TAG }}
-          commitish: ${{ github.sha }}
+          target_commitish: ${{ github.sha }}
           body: |
             Automatic build of **ZeroTuition ${{ steps.get_version.outputs.TAG }}**.
 
