@@ -153,13 +153,14 @@ login_title, main_title = udemy.check_for_update()
 login_error = False
 
 try:
-    if udemy.settings["stay_logged_in"]["auto"]:
-        udemy.fetch_cookies()
+    if not udemy.load_saved_session():
+        if udemy.settings["stay_logged_in"]["auto"]:
+            udemy.fetch_cookies()
 
-    elif udemy.settings["stay_logged_in"]["manual"]:
-        udemy.manual_login(udemy.settings["email"], udemy.settings["password"])
-    else:
-        raise LoginException("No Saved Login Found")
+        elif udemy.settings["stay_logged_in"]["manual"]:
+            udemy.manual_login(udemy.settings["email"], udemy.settings["password"])
+        else:
+            raise LoginException("No Saved Login Found")
     udemy.get_session_info()
 except LoginException:
     login_error = True

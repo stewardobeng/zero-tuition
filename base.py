@@ -944,6 +944,40 @@ class Udemy:
             csrf_token=csrf_token,
         )
 
+    def save_session(self):
+        """Persist login cookies so future runs can skip the login flow."""
+        try:
+            path = get_user_data_path(
+                f"zerotuition-{self.interface}-session.json"
+            )
+            with open(path, "w") as f:
+                json.dump(self.cookie_dict, f, indent=2)
+        except Exception:
+            logger.exception("Failed to save session")
+
+    def load_saved_session(self) -> bool:
+        """Restore a previously saved session. Returns True if found."""
+        try:
+            path = get_user_data_path(
+                f"zerotuition-{self.interface}-session.json"
+            )
+            with open(path) as f:
+                self.cookie_dict = json.load(f)
+            return True
+        except Exception:
+            return False
+
+    def clear_saved_session(self):
+        try:
+            path = get_user_data_path(
+                f"zerotuition-{self.interface}-session.json"
+            )
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.exception("Failed to clear saved session")
+
     def fetch_cookies(self):
         """Gets cookies from browser
         Sets cookies_dict, cookie_jar
@@ -1093,6 +1127,7 @@ class Udemy:
         self.client = s
         logger.info("Session info retrieved")
         self.get_enrolled_courses()
+        self.save_session()
 
     def get_enrolled_courses(self):
         """Get enrolled courses

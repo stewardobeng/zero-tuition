@@ -1,9 +1,11 @@
+import argparse
 import threading
 import time
 import traceback
 import sys
 from datetime import datetime
 
+import questionary
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
@@ -211,7 +213,113 @@ def create_scraping_thread(site: str):
         handle_error(f"Error in {site}", error=error, exit_program=True)
 
 
+def edit_settings_interactively(udemy: Udemy):
+    """Interactive preferences picker; saves selections to the settings file."""
+    settings = udemy.settings
+
+    console.print(
+        "\n[bold cyan]Preferences[/bold cyan] "
+        "[dim]- space to toggle, arrow keys to move, enter to confirm[/dim]\n"
+    )
+
+    sites = questionary.checkbox(
+        "Coupon sites to scan:",
+        choices=[
+            questionary.Choice(s, checked=settings["sites"].get(s, False))
+            for s in settings["sites"]
+        ],
+        validate=lambda picked: True if picked else "Select at least one site",
+    ).ask()
+    if sites is None:
+        console.print(
+            "[yellow]Preferences cancelled - keeping saved settings[/yellow]"
+        )
+        return
+
+    languages = questionary.checkbox(
+        "Course languages:",
+        choices=[
+            questionary.Choice(s, checked=settings["languages"].get(s, False))
+            for s in settings["languages"]
+        ],
+        validate=lambda picked: True if picked else "Select at least one language",
+    ).ask()
+    if languages is None:
+        console.print(
+            "[yellow]Preferences cancelled - keeping saved settings[/yellow]"
+        )
+        return
+
+    categories = questionary.checkbox(
+        "Course categories:",
+        choices=[
+            questionary.Choice(s, checked=settings["categories"].get(s, False))
+            for s in settings["categories"]
+        ],
+        validate=lambda picked: True if picked else "Select at least one category",
+    ).ask()
+    if categories is None:
+        console.print(
+            "[yellow]Preferences cancelled - keeping saved settings[/yellow]"
+        )
+        return
+
+    rating = questionary.select(
+        "Minimum course rating:",
+        choices=[f"{i * 0.5:.1f}" for i in range(11)],
+        default=f"{settings['min_rating']:.1f}",
+    ).ask()
+
+    paid_only = questionary.confirm(
+        "Skip always-free courses (coupon discounts only)?",
+        default=bool(settings["discounted_only"]),
+    ).ask()
+
+    max_age = questionary.select(
+        "Only courses updated within the last (months):",
+        choices=["3", "6", "12", "24", "36", "48"],
+        default=str(settings["course_update_threshold_months"]),
+    ).ask()
+
+    if None in (rating, paid_only, max_age):
+        console.print(
+            "[yellow]Preferences cancelled - keeping saved settings[/yellow]"
+        )
+        return
+
+    settings["sites"] = {s: s in sites for s in settings["sites"]}
+    settings["languages"] = {s: s in languages for s in settings["languages"]}
+    settings["categories"] = {s: s in categories for s in settings["categories"]}
+    settings["min_rating"] = float(rating)
+    settings["discounted_only"] = bool(paid_only)
+    settings["course_update_threshold_months"] = int(max_age)
+    udemy.save_settings()
+
+    console.print(
+        f"[green]Saved.[/green] {len(sites)} sites, {len(languages)} languages, "
+        f"{len(categories)} categories, min rating {rating}, "
+        f"{'coupon courses only' if paid_only else 'free courses included'}, "
+        f"updated within {max_age} months\n"
+    )
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ZeroTuition CLI")
+    parser.add_argument(
+        "--no-menu",
+        action="store_true",
+        help="skip the interactive preferences picker (for scheduled runs)",
+    )
+    args = parser.parse_args()
+
+    # never crash on spinner/emoji glyphs when output is piped or on legacy
+    # consoles - replace unencodable characters instead of raising
+    try:
+        sys.stdout.reconfigure(errors="replace")
+        sys.stderr.reconfigure(errors="replace")
+    except Exception:
+        pass
+
     try:
         logger.info("Starting CLI application")
         udemy = Udemy("cli")
@@ -233,12 +341,14 @@ if __name__ == "__main__":
         while not login_successful:
             try:
                 login_method = ""
-                if udemy.settings["use_browser_cookies"]:
+                if udemy.load_saved_session():
+                    login_method = "Saved session"
+                elif udemy.settings["use_browser_cookies"]:
                     with console.status(
                         "[cyan]Trying to login using browser cookies...[/cyan]"
                     ):
                         udemy.fetch_cookies()
-                        login_method = "Browser Cookies"
+                    login_method = "Browser Cookies"
                 elif udemy.settings["email"] and udemy.settings["password"]:
                     email, password = (
                         udemy.settings["email"],
@@ -267,15 +377,34 @@ if __name__ == "__main__":
                 login_successful = True
             except LoginException as e:
                 handle_error("Login error", error=e, exit_program=False)
-                if "Browser" in login_method:
+                if "Saved session" in login_method:
+                    console.print(
+                        "[red]Saved session expired - please log in again[/red]"
+                    )
+                    udemy.clear_saved_session()
+                elif "Browser" in login_method:
                     console.print("[red]Can't login using cookies[/red]")
                     udemy.settings["use_browser_cookies"] = False
                 elif "Email" in login_method:
-                    udemy.settings["email"], udemy.settings["password"] = "", ""
+                    if "incorrect" in str(e):
+                        console.print(
+                            "[red]Wrong email or password - saved credentials "
+                            "cleared[/red]"
+                        )
+                        udemy.settings["email"], udemy.settings["password"] = "", ""
+                    else:
+                        console.print(
+                            "[yellow]Temporary login problem - your saved login "
+                            "was kept. Run again later.[/yellow]"
+                        )
+                        sys.exit(1)
 
         udemy.save_settings()
         console.print(f"[bold green]Logged in as {udemy.display_name}[/bold green]")
         logger.info(f"Logged in")
+
+        if not args.no_menu:
+            edit_settings_interactively(udemy)
 
         user_dumb = udemy.is_user_dumb()
         if user_dumb:

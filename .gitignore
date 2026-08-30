@@ -21,3 +21,6 @@ __pycache__/
 *.spec
 log.txt
 error.html
+zerotuition-cli-session.json
+zerotuition-gui-session.json
+zerotuition-server-session.json

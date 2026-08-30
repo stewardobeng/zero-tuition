@@ -7,3 +7,4 @@ pyopenssl
 rich
 loguru
 lxml
+questionary
