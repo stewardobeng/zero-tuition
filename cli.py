@@ -74,7 +74,7 @@ def create_layout() -> Layout:
 def create_header() -> Panel:
     """Create the header panel."""
     return Panel(
-        f"[bold blue]ZeroTuition[/bold blue] [cyan]{VERSION}[/cyan] | Logged in as: [bold green]{udemy.display_name}[/bold green] | [yellow]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/yellow]",
+        f"[bold blue]ZeroTuition[/bold blue] [cyan]{VERSION}[/cyan] | Logged in as: [bold green]{udemy.display_name}[/bold green] | [magenta]Enrolled Courses: {len(udemy.enrolled_courses)}[/magenta] | [yellow]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/yellow]",
         style="white on blue",
     )
 
@@ -130,9 +130,13 @@ def create_stats_panel(udemy: Udemy) -> Panel:
     row3 = Table.grid(padding=3)
     row3.add_column(style="cyan", justify="right", width=22)
     row3.add_column(style="white", justify="left", width=15)
+    row3.add_column(style="cyan", justify="right", width=18)
+    row3.add_column(style="white", justify="left", width=12)
     row3.add_row(
         "Checkout Failed:",
         f"[red]{udemy.failed_c}[/red]",
+        "Account Enrolled:",
+        f"[magenta]{len(udemy.enrolled_courses)}[/magenta]",
     )
 
     grid = Table.grid(padding=2)
@@ -400,7 +404,10 @@ if __name__ == "__main__":
                         sys.exit(1)
 
         udemy.save_settings()
-        console.print(f"[bold green]Logged in as {udemy.display_name}[/bold green]")
+        console.print(
+            f"[bold green]Logged in as {udemy.display_name}[/bold green] "
+            f"[magenta]({len(udemy.enrolled_courses)} enrolled courses)[/magenta]"
+        )
         logger.info(f"Logged in")
 
         if not args.no_menu:
@@ -481,6 +488,10 @@ if __name__ == "__main__":
         table.add_row("Excluded Courses", f"[yellow]{udemy.excluded_c}[/yellow]")
         table.add_row("Expired Courses", f"[red]{udemy.expired_c}[/red]")
         table.add_row("Checkout Failed", f"[red]{udemy.failed_c}[/red]")
+        table.add_row(
+            "Total Enrolled Courses (Account)",
+            f"[magenta]{len(udemy.enrolled_courses)}[/magenta]",
+        )
 
         console.print(table)
 

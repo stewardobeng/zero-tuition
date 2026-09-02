@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.0
+- Added `Coupon Scorpion` as a new coupon source
+- Added `ScrollCoupons` as a new coupon source
+- Added `UdemyXpert` as a new coupon source
+- Re-added `Tutorial Bar` with a new scraper for its redesigned site
+- Added total enrolled courses for the account to the GUI (next to logout), CLI stats and results
+- `Coupon Scorpion` scraper detects rate limiting and stops early instead of risking a hard block
+- Browser-cookie login (rookiepy) is now optional - app starts even when it is not installed for the current Python version
+- New coupon sites are enabled automatically for existing settings on startup
+
 ## v2.3.6
 - Fix settings and log file not saving
 

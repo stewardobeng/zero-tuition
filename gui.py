@@ -100,6 +100,10 @@ def scrape():
             main_window["stat_expired"].update(value=f"{udemy.expired_c}")
             main_window["stat_failed"].update(value=f"{udemy.failed_c}")
 
+            main_window["enrolled_count_t"].update(
+                value=f"| Enrolled Courses: {len(udemy.enrolled_courses)}"
+            )
+
             ready_count = len(getattr(udemy, "valid_courses", []))
             main_window["stat_ready_enroll"].update(value=f"{ready_count}/5")
 
@@ -125,6 +129,9 @@ def scrape():
         main_window["e_c"].update(value=f"Expired Courses: {udemy.expired_c}")
         main_window["ex_c"].update(value=f"Excluded Courses: {udemy.excluded_c}")
         main_window["f_c"].update(value=f"Checkout Failed: {udemy.failed_c}")
+        main_window["ec_c"].update(
+            value=f"Total Enrolled (Account): {len(udemy.enrolled_courses)}"
+        )
 
     except Exception:
         e = traceback.format_exc()
@@ -596,6 +603,7 @@ done_col = [
     [sg.Text("Expired Courses:           ", key="e_c", text_color="#FF0000")],
     [sg.Text("Excluded Courses:          ", key="ex_c", text_color="#FF4500")],
     [sg.Text("Checkout Failed:           ", key="f_c", text_color="#FF6347")],
+    [sg.Text("Total Enrolled (Account):  ", key="ec_c", text_color="#DDA0DD")],
 ]
 
 current_course_panel = [
@@ -687,7 +695,15 @@ else:
     )
 
 main_lo = [
-    [sg.Text(f"Logged in as: {udemy.display_name}", key="user_t"), logout_btn_lo],
+    [
+        sg.Text(f"Logged in as: {udemy.display_name}", key="user_t"),
+        sg.Text(
+            f"| Enrolled Courses: {len(udemy.enrolled_courses)}",
+            key="enrolled_count_t",
+            text_color="#DDA0DD",
+        ),
+        logout_btn_lo,
+    ],
     [
         sg.pin(sg.Column(main_col, key="main_col")),
         sg.pin(sg.Column(output_col, key="output_col", visible=False)),

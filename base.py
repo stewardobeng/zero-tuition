@@ -11,11 +11,15 @@ import traceback
 from datetime import datetime, timezone
 from decimal import Decimal
 from html import unescape
-from urllib.parse import parse_qs, unquote, urlparse, urlsplit, urlunparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse, urlsplit, urlunparse
 
 import cloudscraper
 import requests
-import rookiepy
+
+try:
+    import rookiepy
+except ImportError:  # no wheel for this python yet - only browser-cookie login needs it
+    rookiepy = None
 from bs4 import BeautifulSoup as bs
 from loguru import logger
 from rich import print
@@ -23,7 +27,7 @@ from rich.traceback import install as rich_traceback_install
 
 rich_traceback_install()
 
-VERSION = "v1.1.0"
+VERSION = "v1.2.0"
 
 
 def get_user_data_path(filename):
@@ -55,12 +59,15 @@ scraper_dict: dict = {
     "Real Discount": "rd",
     "Courson": "cxyz",
     "IDownloadCoupons": "idc",
-    # "Tutorial Bar": "tb",
+    "Tutorial Bar": "tb",
     "E-next": "en",
     "Discudemy": "du",
     "Udemy Freebies": "uf",
     "Course Joiner": "cj",
     "Course Vania": "cv",
+    "Coupon Scorpion": "cs",
+    "UdemyXpert": "ux",
+    "ScrollCoupons": "sc",
 }
 
 LINKS = {
@@ -198,7 +205,7 @@ class Course:
 
 class Scraper:
     """
-    Scrapers: RD,TB, CV, IDC, EN, DU, UF
+    Scrapers: RD, CXYZ, IDC, TB, EN, DU, UF, CJ, CV, CS, UX, SC
     """
 
     def __init__(
@@ -439,37 +446,45 @@ class Scraper:
         self.set_attr("done", True)
 
     def tb(self):
+        """Tutorial Bar is a Next.js app; coupon data ships inside its flight JSON"""
         try:
-            all_items = []
-            self.set_attr("length", 5)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                future_page = [
-                    executor.submit(
-                        self.fetch_json,
-                        f"https://www.tutorialbar.com/wp-json/wp/v2/posts?categories=55&per_page=100&page={page}",
-                    )
-                    for page in range(1, 6)
-                ]
-                for i, future in enumerate(
-                    concurrent.futures.as_completed(future_page)
-                ):
-                    try:
-                        content = future.result()
-                    except Exception as e:
-                        logger.error(f"Skipping invalid response: {e}")
-                        self.set_attr("progress", i + 1)
-                        continue
-                    if content:
-                        all_items.extend(content)
-                    self.set_attr("progress", i + 1)
+            content = self.fetch_page("https://tutorialbar.com/live-coupons").text
 
-            self.set_attr("length", len(all_items))
+            title_positions = [
+                (m.start(), m.group(1))
+                for m in re.finditer(r'\\"title\\":\\"(.{5,200}?)\\"', content)
+            ]
+            coupon_pattern = re.compile(
+                r'\\"couponUrl\\":\\"(https://www\.udemy\.com/[^"\\]+)\\"'
+            )
 
-            for i, item in enumerate(all_items):
-                title = item["title"]["rendered"]
-                link = item["acf"]["course_url"]
-                if "www.udemy.com" in link:
-                    self.append_to_list(title, link)
+            seen = set()
+            items = []
+            for m in coupon_pattern.finditer(content):
+                tail = content[m.end() : m.end() + 300]
+                if 'is100PercentOff\\":true' not in tail:
+                    continue
+                if 'isExpired\\":true' in tail:
+                    continue
+                title = ""
+                for pos, candidate in title_positions:
+                    if pos < m.start():
+                        title = candidate
+                    else:
+                        break
+                link = m.group(1)
+                if link in seen:
+                    continue
+                seen.add(link)
+                items.append((title, link))
+
+            self.set_attr("length", len(items))
+            for i, (title, link) in enumerate(items):
+                title = re.sub(
+                    r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), title
+                )
+                title = title.replace('\\"', '"').replace("\\/", "/").strip()
+                self.append_to_list(title, link)
                 self.set_attr("progress", i + 1)
         except:
             self.handle_exception()
@@ -797,6 +812,233 @@ class Scraper:
 
         self.set_attr("done", True)
 
+    def cs(self):
+        """Coupon Scorpion: WP API for the post list, out.php redirect for the link"""
+        try:
+            all_items = []
+            head = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "referer": "https://couponscorpion.com/",
+            }
+
+            # only the newest page is worth fetching - coupons here die within
+            # days and out.php starts serving a generic fallback for dead ones
+            self.set_attr("length", 1)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future_page = [
+                    executor.submit(
+                        self.fetch_json,
+                        f"https://couponscorpion.com/wp-json/wp/v2/posts?categories=21032&per_page=100&page={page}",
+                        headers=head,
+                    )
+                    for page in range(1, 2)
+                ]
+                for i, future in enumerate(
+                    concurrent.futures.as_completed(future_page)
+                ):
+                    try:
+                        content = future.result()
+                    except Exception as e:
+                        logger.error(f"Skipping invalid response: {e}")
+                        self.set_attr("progress", i + 1)
+                        continue
+                    if content:
+                        all_items.extend(content)
+                    self.set_attr("progress", i + 1)
+
+            self.set_attr("length", len(all_items))
+
+            def _fetch_course_details(item):
+                """Helper method to fetch course details"""
+                title = unescape(item["title"]["rendered"]).strip()
+                content = self.fetch_page(item["link"], headers=head).text
+                match = re.search(
+                    r"scripts/udemy/out\.php\?go=\d+&s=[a-f0-9]+", content
+                )
+                if not match:
+                    logger.error(f"No coupon link found in: {item['link']}")
+                    return None, None
+                r = requests.get(
+                    f"https://couponscorpion.com/{match.group(0)}",
+                    headers=head,
+                    allow_redirects=False,
+                )
+                try:
+                    link = r.headers["Location"]
+                except KeyError:
+                    logger.error(f"No redirect for: {item['link']}")
+                    return None, None
+                if "recommends/link/" in link:
+                    # expired coupon or the site throttling us - same fallback
+                    return title, None
+                link = self.cleanup_link(link)
+                return title, link
+
+            consecutive_fallbacks = 0
+            got_valid_link = False
+            stop = False
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                future_course_details = [
+                    executor.submit(_fetch_course_details, item) for item in all_items
+                ]
+                for i, future in enumerate(
+                    concurrent.futures.as_completed(future_course_details)
+                ):
+                    try:
+                        title, link = future.result()
+                    except Exception as e:
+                        logger.error(f"Skipping invalid course: {e}")
+                        self.set_attr("progress", i + 1)
+                        continue
+                    if link is None:
+                        # every result being a fallback means we are throttled,
+                        # not that every coupon died - bail out before the site
+                        # hardens the block
+                        consecutive_fallbacks += 1
+                        if consecutive_fallbacks >= 10 and not got_valid_link:
+                            logger.warning(
+                                "Coupon Scorpion is serving fallback redirects - "
+                                "stopping early to avoid a hard block"
+                            )
+                            stop = True
+                            for f in future_course_details:
+                                f.cancel()
+                    else:
+                        consecutive_fallbacks = 0
+                        got_valid_link = True
+                        if title:
+                            self.append_to_list(title, link)
+                    if stop:
+                        break
+                    self.set_attr("progress", i + 1)
+        except:
+            self.handle_exception()
+        self.set_attr("done", True)
+
+    def ux(self):
+        """UdemyXpert: listing pages give course slugs, detail pages hold the link"""
+        try:
+            all_items = []
+
+            self.set_attr("length", 5)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                future_page = [
+                    executor.submit(
+                        self.fetch_page, f"https://udemyxpert.com/courses?page={page}"
+                    )
+                    for page in range(1, 6)
+                ]
+                for i, future in enumerate(
+                    concurrent.futures.as_completed(future_page)
+                ):
+                    soup = self.parse_html(future.result().content)
+                    page_items = soup.find_all("a", {"class": "course-card-link"})
+                    for item in page_items:
+                        try:
+                            title = item.img["alt"]
+                            href = urljoin("https://udemyxpert.com/", item["href"])
+                            all_items.append((title, href))
+                        except (KeyError, TypeError):
+                            continue
+                    self.set_attr("progress", i + 1)
+
+            self.set_attr("length", len(all_items))
+
+            def _fetch_course_details(item):
+                """Helper method to fetch course details"""
+                title, href = item
+                content = self.fetch_page(href).content
+                soup = self.parse_html(content)
+                link = soup.find(
+                    "a", href=re.compile(r"https://(www\.)?udemy\.com/")
+                )["href"]
+                if "couponCode" not in link:
+                    raise ValueError(f"No couponCode in link: {link}")
+                link = self.cleanup_link(link)
+                return title, link
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
+                future_course_details = [
+                    executor.submit(_fetch_course_details, item) for item in all_items
+                ]
+                for i, future in enumerate(
+                    concurrent.futures.as_completed(future_course_details)
+                ):
+                    try:
+                        title, link = future.result()
+                    except Exception as e:
+                        logger.error(f"Skipping invalid course: {e}")
+                        self.set_attr("progress", i + 1)
+                        continue
+                    if title and link:
+                        self.append_to_list(title, link)
+                    self.set_attr("progress", i + 1)
+        except:
+            self.handle_exception()
+        self.set_attr("done", True)
+
+    def sc(self):
+        """ScrollCoupons: 100%-off listing pages, deal_btn link on each course page"""
+        try:
+            all_items = []
+
+            self.set_attr("length", 3)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                future_page = [
+                    executor.submit(
+                        self.fetch_page,
+                        f"https://scrollcoupons.com/store/udemy/100-off/{page}",
+                    )
+                    for page in range(1, 4)
+                ]
+                for i, future in enumerate(
+                    concurrent.futures.as_completed(future_page)
+                ):
+                    soup = self.parse_html(future.result().content)
+                    page_items = soup.find_all("a", {"class": "a_udemy_course"})
+                    for item in page_items:
+                        try:
+                            title = item["title"]
+                            href = urljoin("https://scrollcoupons.com/", item["href"])
+                            all_items.append((title, href))
+                        except (KeyError, TypeError):
+                            continue
+                    self.set_attr("progress", i + 1)
+
+            self.set_attr("length", len(all_items))
+
+            def _fetch_course_details(item):
+                """Helper method to fetch course details"""
+                title, href = item
+                content = self.fetch_page(href).content
+                soup = self.parse_html(content)
+                link = soup.find("a", {"class": "deal_btn"})["href"]
+                if "udemy.com" not in link:
+                    raise ValueError(f"Unknown link format: {link}")
+                link = self.cleanup_link(link)
+                return title, link
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
+                future_course_details = [
+                    executor.submit(_fetch_course_details, item) for item in all_items
+                ]
+                for i, future in enumerate(
+                    concurrent.futures.as_completed(future_course_details)
+                ):
+                    try:
+                        title, link = future.result()
+                    except Exception as e:
+                        logger.error(f"Skipping invalid course: {e}")
+                        self.set_attr("progress", i + 1)
+                        continue
+                    if title and link:
+                        self.append_to_list(title, link)
+                    self.set_attr("progress", i + 1)
+        except:
+            self.handle_exception()
+        self.set_attr("done", True)
+
 
 class Udemy:
     def __init__(self, interface: str, debug: bool = False):
@@ -880,10 +1122,9 @@ class Udemy:
         if "Vietnamese" not in self.settings["languages"]:
             self.settings["languages"]["Vietnamese"] = True
 
-        if "Courson" not in self.settings["sites"]:
-            self.settings["sites"]["Courson"] = True
-        if "Course Joiner" not in self.settings["sites"]:
-            self.settings["sites"]["Course Joiner"] = True
+        for site in scraper_dict:
+            if site not in self.settings["sites"]:
+                self.settings["sites"][site] = True
 
         self.settings["languages"] = dict(
             sorted(self.settings["languages"].items(), key=lambda item: item[0])
@@ -982,6 +1223,11 @@ class Udemy:
         """Gets cookies from browser
         Sets cookies_dict, cookie_jar
         """
+        if rookiepy is None:
+            raise LoginException(
+                "Browser cookies package not installed for this Python version - "
+                "use manual login instead"
+            )
         logger.info("Fetching cookies from browser")
         cookies = rookiepy.to_cookiejar(rookiepy.load(["www.udemy.com"]))
         self.cookie_dict: dict = requests.utils.dict_from_cookiejar(cookies)
