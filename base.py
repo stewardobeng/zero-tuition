@@ -27,7 +27,7 @@ from rich.traceback import install as rich_traceback_install
 
 rich_traceback_install()
 
-VERSION = "v1.2.0"
+VERSION = "v1.2.1"
 
 
 def get_user_data_path(filename):
@@ -352,7 +352,11 @@ class Scraper:
                 for i, future in enumerate(
                     concurrent.futures.as_completed(future_page)
                 ):
-                    content = future.result().content
+                    response = future.result()
+                    if response is None:
+                        self.set_attr("progress", i + 1)
+                        continue
+                    content = response.content
                     soup = self.parse_html(content)
                     page_items = soup.find_all("a", {"class": "card-header"})
                     all_items.extend(page_items)
@@ -364,10 +368,12 @@ class Scraper:
                 """Helper method to fetch course details"""
                 title = item.string
                 url = item["href"].split("/")[-1]
-                content = self.fetch_page(
+                response = self.fetch_page(
                     f"https://www.discudemy.com/go/{url}", headers=headers
-                ).content
-                soup = self.parse_html(content)
+                )
+                if response is None:
+                    return None, None
+                soup = self.parse_html(response.content)
                 link = soup.find("div", {"class": "ui segment"}).a["href"]
                 return title, link
 
@@ -408,7 +414,11 @@ class Scraper:
                 for i, future in enumerate(
                     concurrent.futures.as_completed(future_page)
                 ):
-                    content = future.result().content
+                    response = future.result()
+                    if response is None:
+                        self.set_attr("progress", i + 1)
+                        continue
+                    content = response.content
                     soup = self.parse_html(content)
                     page_items = soup.find_all("a", {"class": "theme-img"})
                     all_items.extend(page_items)
@@ -448,7 +458,13 @@ class Scraper:
     def tb(self):
         """Tutorial Bar is a Next.js app; coupon data ships inside its flight JSON"""
         try:
-            content = self.fetch_page("https://tutorialbar.com/live-coupons").text
+            response = self.fetch_page("https://tutorialbar.com/live-coupons")
+            if response is None:
+                self.set_attr("error", "Failed to download tutorialbar.com")
+                self.set_attr("length", -1)
+                self.set_attr("done", True)
+                return
+            content = response.text
 
             title_positions = [
                 (m.start(), m.group(1))
@@ -530,7 +546,13 @@ class Scraper:
 
     def cv(self):
         try:
-            content = self.fetch_page("https://coursevania.com/courses/").content
+            response = self.fetch_page("https://coursevania.com/courses/")
+            if response is None:
+                self.set_attr("error", "Failed to download coursevania.com")
+                self.set_attr("length", -1)
+                self.set_attr("done", True)
+                return
+            content = response.content
 
             try:
                 nonce = re.search(
@@ -557,8 +579,10 @@ class Scraper:
             def _fetch_course_details(item):
                 """Helper method to fetch course details"""
                 title = item.h5.string
-                content = self.fetch_page(item.a["href"]).content
-                soup = self.parse_html(content)
+                response = self.fetch_page(item.a["href"])
+                if response is None:
+                    return None, None
+                soup = self.parse_html(response.content)
                 link = soup.find(
                     "a",
                     {"class": "masterstudy-button-affiliate__link"},
@@ -674,8 +698,11 @@ class Scraper:
                 for i, future in enumerate(
                     concurrent.futures.as_completed(future_page)
                 ):
-                    content = future.result().content
-                    soup = self.parse_html(content)
+                    response = future.result()
+                    if response is None:
+                        self.set_attr("progress", i + 1)
+                        continue
+                    soup = self.parse_html(response.content)
                     page_items = soup.find_all(
                         "a", {"class": "btn btn-secondary btn-sm btn-block"}
                     )
@@ -695,8 +722,11 @@ class Scraper:
                     concurrent.futures.as_completed(future_course_details)
                 ):
                     try:
-                        content = future.result().content
-                        soup = self.parse_html(content)
+                        response = future.result()
+                        if response is None:
+                            self.set_attr("progress", i + 1)
+                            continue
+                        soup = self.parse_html(response.content)
                         title = soup.find("h3").string.strip()
                         try:
                             link = soup.find("a", {"class": "btn btn-primary"})["href"]
@@ -852,9 +882,11 @@ class Scraper:
             def _fetch_course_details(item):
                 """Helper method to fetch course details"""
                 title = unescape(item["title"]["rendered"]).strip()
-                content = self.fetch_page(item["link"], headers=head).text
+                response = self.fetch_page(item["link"], headers=head)
+                if response is None:
+                    return None, None
                 match = re.search(
-                    r"scripts/udemy/out\.php\?go=\d+&s=[a-f0-9]+", content
+                    r"scripts/udemy/out\.php\?go=\d+&s=[a-f0-9]+", response.text
                 )
                 if not match:
                     logger.error(f"No coupon link found in: {item['link']}")
@@ -932,7 +964,11 @@ class Scraper:
                 for i, future in enumerate(
                     concurrent.futures.as_completed(future_page)
                 ):
-                    soup = self.parse_html(future.result().content)
+                    response = future.result()
+                    if response is None:
+                        self.set_attr("progress", i + 1)
+                        continue
+                    soup = self.parse_html(response.content)
                     page_items = soup.find_all("a", {"class": "course-card-link"})
                     for item in page_items:
                         try:
@@ -948,8 +984,10 @@ class Scraper:
             def _fetch_course_details(item):
                 """Helper method to fetch course details"""
                 title, href = item
-                content = self.fetch_page(href).content
-                soup = self.parse_html(content)
+                response = self.fetch_page(href)
+                if response is None:
+                    return None, None
+                soup = self.parse_html(response.content)
                 link = soup.find(
                     "a", href=re.compile(r"https://(www\.)?udemy\.com/")
                 )["href"]
@@ -995,7 +1033,11 @@ class Scraper:
                 for i, future in enumerate(
                     concurrent.futures.as_completed(future_page)
                 ):
-                    soup = self.parse_html(future.result().content)
+                    response = future.result()
+                    if response is None:
+                        self.set_attr("progress", i + 1)
+                        continue
+                    soup = self.parse_html(response.content)
                     page_items = soup.find_all("a", {"class": "a_udemy_course"})
                     for item in page_items:
                         try:
@@ -1011,8 +1053,10 @@ class Scraper:
             def _fetch_course_details(item):
                 """Helper method to fetch course details"""
                 title, href = item
-                content = self.fetch_page(href).content
-                soup = self.parse_html(content)
+                response = self.fetch_page(href)
+                if response is None:
+                    return None, None
+                soup = self.parse_html(response.content)
                 link = soup.find("a", {"class": "deal_btn"})["href"]
                 if "udemy.com" not in link:
                     raise ValueError(f"Unknown link format: {link}")

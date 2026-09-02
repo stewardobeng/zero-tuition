@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.1
+- Fixed crash in `Udemy Freebies` scraper when a page failed to download
+  (`'NoneType' object has no attribute 'content'`) - failed pages are now
+  skipped and the rest of the site still scans
+- Applied the same fix to all scrapers with page downloads: `Discudemy`,
+  `E-next`, `Course Vania`, `Tutorial Bar`, `Coupon Scorpion`, `UdemyXpert`,
+  `ScrollCoupons` - one flaky page no longer aborts a site
+
 ## v1.2.0
 - Added `Coupon Scorpion` as a new coupon source
 - Added `ScrollCoupons` as a new coupon source
